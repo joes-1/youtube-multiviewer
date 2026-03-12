@@ -40,8 +40,11 @@
       display:flex;
       justify-content:space-between;
       align-items:center;
+      flex-wrap:wrap;
+      gap: 10px;
     }
     .panel h1{margin:0; font-size:16px; letter-spacing:.2px; display:flex; align-items:center; gap:8px;}
+    .header-controls { display: flex; align-items: center; gap: 12px; }
     .status{font-size:12px; color:var(--muted);}
 
     main .wrap{padding-top:16px; padding-bottom:18px;}
@@ -85,18 +88,21 @@
       font-weight: 600;
     }
     .tileBar .spacer{margin-left:auto;}
-    .miniBtn{
-      padding:5px 9px;
+    
+    /* Updated button styling to handle the header button too */
+    .miniBtn, .actionBtn{
       border-radius:8px;
-      font-size:11px;
       font-weight:700;
-      flex-shrink:0;
       background:var(--btn);
       color:var(--text);
       border:1px solid var(--border);
       cursor:pointer;
+      transition: .15s ease;
     }
-    .miniBtn:hover{background:var(--btnHover);}
+    .miniBtn { padding:5px 9px; font-size:11px; flex-shrink:0; }
+    .actionBtn { padding:8px 14px; font-size:13px; }
+    .miniBtn:hover, .actionBtn:hover{background:var(--btnHover);}
+    
     .player{
       aspect-ratio:16/9;
       width:100%;
@@ -141,7 +147,10 @@
     <div class="row">
       <div class="panel">
         <h1>📺 YouTube Multiviewer</h1>
-        <div class="status" id="status">Loading...</div>
+        <div class="header-controls">
+          <div class="status" id="status">Loading...</div>
+          <button id="muteAllBtn" class="actionBtn">🔊 Unmute All</button>
+        </div>
       </div>
     </div>
   </div>
@@ -161,7 +170,7 @@
   // ==========================================
   const STREAMS = [
     { url: "https://www.youtube.com/live/uN6V2Pq78cA", label: "CNBC-AWAAZ" },
-    { url: "https://www.youtube.com/live/i_1g_M0JSy4", label: "CNNN18" },
+    { url: "https://www.youtube.com/live/8L87xMCcUKs", label: "CNNN18" },
     { url: "https://www.youtube.com/live/P857H4ej-MQ", label: "CNBC-TV18" },
     { url: "https://www.youtube.com/live/S6bkjo7KHek", label: "Sansad TV 1" },
     { url: "https://www.youtube.com/live/TxoAYWg64Ao", label: "DD-NEWS" }
@@ -169,6 +178,9 @@
 
   const $grid   = document.getElementById("grid");
   const $status = document.getElementById("status");
+  const $muteAllBtn = document.getElementById("muteAllBtn");
+  let isAllMuted = true; // Videos start muted due to autoplay policies
+
   document.getElementById("yr").textContent = new Date().getFullYear();
 
   function extractVideoId(input){
@@ -196,12 +208,12 @@
     const origin = location.origin !== "null" ? location.origin : "https://www.youtube.com";
     const params = new URLSearchParams({
       autoplay:        "1",
-      mute:            "1",
+      mute:            "1", // Required for autoplay to work initially
       playsinline:     "1",
       rel:             "0",
       modestbranding:  "1",
       iv_load_policy:  "3",
-      enablejsapi:     "1",
+      enablejsapi:     "1", // Required for postMessage volume control
       origin:          origin,
     });
     return `https://www.youtube.com/embed/${videoId}?${params.toString()}`;
@@ -284,7 +296,7 @@
     const count = STREAMS.length;
     let cols = 1;
     if (count > 0) {
-      cols = Math.ceil(Math.sqrt(count)); // 1->1, 2->2, 3->2, 4->2, 5->3, etc.
+      cols = Math.ceil(Math.sqrt(count)); 
     }
     
     $grid.style.setProperty("--cols", cols);
@@ -295,6 +307,23 @@
 
     $status.textContent = `Monitoring ${count} stream(s)`;
   }
+
+  // Handle Mute/Unmute All using the YouTube postMessage API
+  $muteAllBtn.addEventListener("click", () => {
+    isAllMuted = !isAllMuted;
+    $muteAllBtn.textContent = isAllMuted ? "🔊 Unmute All" : "🔇 Mute All";
+    
+    const iframes = document.querySelectorAll("iframe");
+    iframes.forEach(iframe => {
+      if (iframe.contentWindow) {
+        iframe.contentWindow.postMessage(JSON.stringify({
+          "event": "command",
+          "func": isAllMuted ? "mute" : "unMute",
+          "args": []
+        }), "*");
+      }
+    });
+  });
 
   render();
 </script>
