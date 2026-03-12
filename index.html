@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>YouTube Multiviewer</title>
+  <style>
+    :root{
+      --bg:#0b1020;
+      --panel:#101a33;
+      --card:#0f172a;
+      --border:rgba(255,255,255,.10);
+      --text:#e5e7eb;
+      --muted:#9ca3af;
+      --btn:#1f2a4a;
+      --btnHover:#2a3a66;
+      --radius:14px;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial,sans-serif;
+      background:linear-gradient(180deg,#070b16 0%, #0b1020 55%, #070b16 100%);
+      color:var(--text);
+    }
+    header{
+      position:sticky; top:0; z-index:50;
+      background:rgba(11,16,32,.92);
+      backdrop-filter: blur(10px);
+      border-bottom:1px solid var(--border);
+    }
+    .wrap{max-width:1400px; margin:0 auto; padding:14px 14px;}
+    .row{display:flex; gap:12px; align-items:stretch; flex-wrap:wrap;}
+    .panel{
+      flex:1 1 520px;
+      background:rgba(16,26,51,.65);
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      padding:12px 16px;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+    }
+    .panel h1{margin:0; font-size:16px; letter-spacing:.2px; display:flex; align-items:center; gap:8px;}
+    .status{font-size:12px; color:var(--muted);}
+
+    main .wrap{padding-top:16px; padding-bottom:18px;}
+
+    /* dynamic grid via CSS variable */
+    .grid{
+      display:grid;
+      grid-template-columns: repeat(var(--cols,3), minmax(0,1fr));
+      gap:10px;
+    }
+    @media(max-width:900px){.grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
+    @media(max-width:600px){.grid{grid-template-columns:1fr;}}
+
+    .tile{
+      background:rgba(15,23,42,.65);
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      overflow:hidden;
+      position:relative;
+      display:flex;
+      flex-direction:column;
+    }
+    .tileBar{
+      display:flex; align-items:center; gap:6px;
+      padding:6px 8px;
+      border-bottom:1px solid var(--border);
+      background:rgba(8,12,22,.65);
+      flex-shrink:0;
+    }
+    .badge{
+      font-size:11px;
+      color:var(--muted);
+      padding:3px 7px;
+      border-radius:999px;
+      border:1px solid var(--border);
+      background:rgba(255,255,255,.04);
+      white-space:nowrap;
+      max-width:200px;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      font-weight: 600;
+    }
+    .tileBar .spacer{margin-left:auto;}
+    .miniBtn{
+      padding:5px 9px;
+      border-radius:8px;
+      font-size:11px;
+      font-weight:700;
+      flex-shrink:0;
+      background:var(--btn);
+      color:var(--text);
+      border:1px solid var(--border);
+      cursor:pointer;
+    }
+    .miniBtn:hover{background:var(--btnHover);}
+    .player{
+      aspect-ratio:16/9;
+      width:100%;
+      background:#000;
+      position:relative;
+      flex-shrink:0;
+    }
+    iframe{
+      width:100%;
+      height:100%;
+      border:0;
+      display:block;
+    }
+    .empty{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      height:100%;
+      color:var(--muted);
+      font-size:12px;
+      padding:16px;
+      text-align:center;
+    }
+
+    .tile:fullscreen .tileBar{display:flex;}
+    .tile:fullscreen .player{aspect-ratio:unset; height:calc(100vh - 36px);}
+
+    footer{
+      color:var(--muted);
+      font-size:12px;
+      padding:14px;
+      text-align:center;
+      border-top:1px solid var(--border);
+      background:rgba(11,16,32,.55);
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div class="row">
+      <div class="panel">
+        <h1>📺 YouTube Multiviewer</h1>
+        <div class="status" id="status">Loading...</div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+    <div class="grid" id="grid" style="--cols:1"></div>
+  </div>
+</main>
+
+<footer>© <span id="yr"></span> • YouTube Multiviewer</footer>
+
+<script>
+  // ==========================================
+  // 1. SPECIFY YOUR STREAMS AND LABELS HERE
+  // ==========================================
+  const STREAMS = [
+    { url: "https://www.youtube.com/watch?v=jfKfPfyJRdk", label: "Lofi Beats - ChilledCow" },
+    { url: "https://www.youtube.com/live/21X5lGlDOfg",    label: "NASA Live Stream" },
+    { url: "https://youtu.be/5qap5aO4i9A",                label: "News Coverage" },
+    { url: "dQw4w9WgXcQ",                                 label: "Music Video" }
+  ];
+
+  const $grid   = document.getElementById("grid");
+  const $status = document.getElementById("status");
+  document.getElementById("yr").textContent = new Date().getFullYear();
+
+  function extractVideoId(input){
+    try{
+      if(/^[a-zA-Z0-9_-]{11}$/.test(input.trim())) return input.trim();
+      const url = new URL(input.trim());
+      if(url.hostname.includes("youtu.be")){
+        const id = url.pathname.split("/").filter(Boolean)[0];
+        if(id) return id;
+      }
+      if(url.searchParams.has("v")){
+        const id = url.searchParams.get("v");
+        if(id) return id;
+      }
+      const parts = url.pathname.split("/").filter(Boolean);
+      for(const kw of ["live","embed","shorts"]){
+        const idx = parts.indexOf(kw);
+        if(idx !== -1 && parts[idx+1]) return parts[idx+1];
+      }
+      return null;
+    }catch(e){ return null; }
+  }
+
+  function buildEmbedUrl(videoId){
+    const origin = location.origin !== "null" ? location.origin : "https://www.youtube.com";
+    const params = new URLSearchParams({
+      autoplay:        "1",
+      mute:            "1",
+      playsinline:     "1",
+      rel:             "0",
+      modestbranding:  "1",
+      iv_load_policy:  "3",
+      enablejsapi:     "1",
+      origin:          origin,
+    });
+    return `https://www.youtube.com/embed/${videoId}?${params.toString()}`;
+  }
+
+  function tileTemplate(stream){
+    const rawUrl = stream.url || "";
+    const vid = extractVideoId(rawUrl);
+
+    const tile = document.createElement("div");
+    tile.className = "tile";
+
+    /* bar */
+    const bar = document.createElement("div");
+    bar.className = "tileBar";
+
+    const badge = document.createElement("div");
+    badge.className = "badge";
+    badge.title = rawUrl;
+    badge.textContent = stream.label || "Untitled Stream";
+
+    const spacer = document.createElement("div");
+    spacer.className = "spacer";
+
+    const reloadBtn = document.createElement("button");
+    reloadBtn.className = "miniBtn";
+    reloadBtn.textContent = "⟳";
+    reloadBtn.title = "Reload stream";
+    reloadBtn.disabled = !vid;
+    reloadBtn.onclick = () => {
+      const iframe = tile.querySelector("iframe");
+      if(iframe){ const s = iframe.src; iframe.src=""; iframe.src=s; }
+    };
+
+    const openBtn = document.createElement("button");
+    openBtn.className = "miniBtn";
+    openBtn.textContent = "↗";
+    openBtn.title = "Open in YouTube";
+    openBtn.disabled = !rawUrl;
+    openBtn.onclick = () => rawUrl && window.open((rawUrl.includes('http') ? rawUrl : `https://youtube.com/watch?v=${rawUrl}`),"_blank","noopener,noreferrer");
+
+    const fsBtn = document.createElement("button");
+    fsBtn.className = "miniBtn";
+    fsBtn.textContent = "⛶";
+    fsBtn.title = "Fullscreen";
+    fsBtn.onclick = async () => {
+      try{
+        if(!document.fullscreenElement) await tile.requestFullscreen();
+        else await document.exitFullscreen();
+      }catch(e){}
+    };
+
+    bar.append(badge, spacer, reloadBtn, openBtn, fsBtn);
+
+    /* player */
+    const player = document.createElement("div");
+    player.className = "player";
+
+    if(!vid){
+      badge.textContent = `Invalid URL`;
+      player.innerHTML = `<div class="empty">Could not parse video ID from:<br><span style="word-break:break-all;font-size:11px;opacity:.7">${rawUrl}</span></div>`;
+    } else {
+      const iframe = document.createElement("iframe");
+      iframe.src = buildEmbedUrl(vid);
+      iframe.allow = "autoplay; fullscreen; picture-in-picture; encrypted-media";
+      iframe.allowFullscreen = true;
+      iframe.loading = "lazy";
+      iframe.referrerPolicy = "origin"; 
+      player.appendChild(iframe);
+    }
+
+    tile.append(bar, player);
+    return tile;
+  }
+
+  function render(){
+    $grid.innerHTML = "";
+    
+    // Auto-expand logic based on array length
+    const count = STREAMS.length;
+    let cols = 1;
+    if (count > 0) {
+      cols = Math.ceil(Math.sqrt(count)); // 1->1, 2->2, 3->2, 4->2, 5->3, etc.
+    }
+    
+    $grid.style.setProperty("--cols", cols);
+
+    for(let i=0; i<count; i++){
+      $grid.appendChild(tileTemplate(STREAMS[i]));
+    }
+
+    $status.textContent = `Monitoring ${count} stream(s)`;
+  }
+
+  render();
+</script>
+</body>
+</html>
